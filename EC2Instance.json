@@ -1,0 +1,227 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS CF Template to create EC2, VPC, Subnets, Security Group, Route Table and Internet Gateway",
+    "Parameters":{
+        "AvailabilityZone":{
+            "Description": "Select the Availability Zone for your Deployment",
+            "Type": "AWS::EC2::AvailabilityZone::Name"
+        }
+    },
+    "Mappings":{
+        "SubnetConfig":{
+            "VPC":{
+                "CIDR": "10.0.0.0/16"
+            },
+            "PublicSubnet":{
+                "CIDR": "10.0.1.0/24"
+            },
+            "PrivateSubnet":{
+                "CIDR": "10.0.2.0/24"
+            }
+        }
+    },
+    "Resources":{      
+        "VPC":{
+            "Type": "AWS::EC2::VPC",
+            "Properties":{
+                "CidrBlock":{
+                    "Fn::FindInMap":[
+                        "SubnetConfig",
+                        "VPC",
+                        "CIDR"
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "magic_vpc"
+                    }
+                ]
+            }
+        },
+        "InternetGateway":{
+            "Type":"AWS::EC2::InternetGateway"
+        },
+        "InternetGatewayAttachment":{
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties":{
+                "InternetGatewayId":{
+                    "Ref": "InternetGateway"
+                },
+                "VpcId":{
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "PublicSubnet":{
+            "Type": "AWS::EC2::Subnet",
+            "Properties":{
+                "CidrBlock":{
+                    "Fn::FindInMap":[
+                        "SubnetConfig",
+                        "PublicSubnet",
+                        "CIDR"
+                    ]
+                },
+                "AvailabilityZone":{"Ref":"AvailabilityZone"},
+                "VpcId": {"Ref":"VPC"},
+                "Tags":[
+                    {
+                        "Key":"Name",
+                        "Value":"magic_PublicSubnet"
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet":{
+            "Type": "AWS::EC2::Subnet",
+            "Properties":{
+                "CidrBlock":{
+                    "Fn::FindInMap":[
+                        "SubnetConfig",
+                        "PrivateSubnet",
+                        "CIDR"
+                    ]
+                },
+                "AvailabilityZone":{"Ref":"AvailabilityZone"},
+                "VpcId": {"Ref":"VPC"},
+                "Tags":[
+                    {
+                        "Key":"Name",
+                        "Value":"magic_PrivateSubnet"
+                    }
+                ]
+            }
+        },
+        "PublicRouteTable":{
+            "Type":"AWS::EC2::RouteTable",
+            "Properties":{
+                "VpcId":{"Ref":"VPC"},
+                "Tags": [
+                    {
+                      "Key": "Name",
+                      "Value": "magic_publicrt"
+                    }
+                  ]
+            }
+        },
+        "PrivateRouteTable":{
+            "Type":"AWS::EC2::RouteTable",
+            "Properties":{
+                "VpcId":{"Ref":"VPC"},
+                "Tags": [
+                    {
+                      "Key": "Name",
+                      "Value": "magic_privatert"
+                    }
+                  ]
+            }
+        },
+        "PublicRoute":{
+            "Type":"AWS::EC2::Route",
+            "DependsOn":"InternetGateway",
+            "Properties":{
+                "RouteTableId":{"Ref":"PublicRouteTable"},
+                "DestinationCidrBlock":"0.0.0.0/0",
+                "GatewayId":{"Ref":"InternetGateway"}
+            }
+        },
+        "AssociateRouteTableWithPublicSubnet":{
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties":{
+                "RouteTableId":{"Ref": "PublicRouteTable"},
+                "SubnetId":{"Ref":"PublicSubnet"}
+            }
+        },
+        "AssociateRouteTableWithPrivateSubnet":{
+            "Type":"AWS::EC2::SubnetRouteTableAssociation",
+            "Properties":{
+                "RouteTableId":{"Ref":"PublicRouteTable"},
+                "SubnetId":{"Ref":"PrivateSubnet"}
+            }
+        },
+        "NetworkInterface": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Properties": {
+              "SubnetId": { "Ref": "PublicSubnet" },
+              "GroupSet": [ { "Ref": "SecurityGroup" } ],
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": "magic_network_interface"
+                }
+              ]
+            }
+          },
+          
+        "EC2Instance":{
+            "Type":"AWS::EC2::Instance",
+            "Properties":{
+                "InstanceType":"t2.micro",
+                "ImageId":"ami-0830f7b072569d4a2",
+                "KeyName":"test_bijji",
+                "NetworkInterfaces": [
+                    {
+                    "NetworkInterfaceId": { "Ref": "NetworkInterface" },
+                    "DeviceIndex": "0"
+                    }
+                ],
+                "Tags": [
+                    {
+                      "Key": "Name",
+                      "Value": "magic_instance"
+                    }
+                  ]
+            }
+        },
+        "SecurityGroup":{
+            "Type":"AWS::EC2::SecurityGroup",
+            "Properties":{
+                "GroupDescription": "EC2 Security Group",
+                "VpcId":{"Ref":"VPC"},
+                "SecurityGroupIngress":[
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort":22,
+                        "CidrIp":"70.106.221.84/32"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp":"76.104.46.140/32"
+                    }
+                ],
+                "Tags":[
+                {
+                    "Key":"Name",
+                    "Value":"magic_sg"
+                }
+                ]
+            }
+        }
+    },
+    "Outputs":{
+        "VpcId":
+        {
+            "Value":{"Ref":"VPC"},
+            "Description":"Id of Created VPC"
+        },
+        "PublicSubnetId":
+        {
+            "Value":{"Ref":"PublicSubnet"},
+            "Description":"Id of Public Subnet"
+        },
+        "PrivateSubnetId":
+        {
+            "Value":{"Ref":"PrivateSubnet"},
+            "Description":"Id of Private Subnet"
+        },
+        "SecurityGroupId":
+        {
+            "Value":{"Ref":"SecurityGroup"},
+            "Description":"Id of the Created Subnet"
+        }
+    }
+}
